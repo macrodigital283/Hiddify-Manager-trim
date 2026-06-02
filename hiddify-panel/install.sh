@@ -32,6 +32,41 @@ if [ -n "$HIDDIFY_PANLE_SOURCE_DIR" ]; then
     uv pip install -e "$HIDDIFY_PANLE_SOURCE_DIR"
 fi
 
+# STANDALONE FIX (1/2): install the bundled HiddifyPanel submodule (./src, pinned
+# v12.3.3) so a plain `bash install.sh` is self-contained -- no PyPI/upstream fetch
+# and no separate hiddify_installer.sh run needed. Runs before run.sh and
+# set_config_from_hpanel (which need the hiddifypanel module + CLI) AND before the
+# TRIM xray/celery patches below (which patch the *installed* package).
+# Idempotent: only installs when the module isn't already importable.
+if [ -d "./src" ] && ! /opt/hiddify-manager/.venv313/bin/python3 -c "import hiddifypanel" 2>/dev/null; then
+    echo "NOTICE: installing hiddifypanel from bundled submodule ./src ..."
+    uv pip install -U wheel
+    uv pip install "$(pwd)/src"
+fi
+
+# STANDALONE FIX (2/2): the pinned v12.3.3 HiddifyPanel, installed from source,
+# ships ONLY the `hiddifypanel` console-script (a Flask/click group). But
+# Hiddify-Manager invokes `hiddify-panel-cli` and `hiddify-http-api`
+# (reload_all_configs, init-db, import-config, set-setting). Upstream PyPI wheels
+# provide these; a source/submodule install does NOT -> config generation writes
+# an empty current.json and every proxy service restart-loops. Create thin
+# wrappers. NOTE: hiddifypanel loads app.cfg relative to CWD (HIDDIFY_CFG_PATH
+# default), so the wrapper must cd into the panel dir before exec.
+VENV_BIN=/opt/hiddify-manager/.venv313/bin
+if [ -x "$VENV_BIN/hiddifypanel" ]; then
+    for _hcmd in hiddify-panel-cli hiddify-http-api; do
+        cat > "$VENV_BIN/$_hcmd" <<'WRAP'
+#!/bin/bash
+# Manager-level wrapper around the hiddifypanel FlaskGroup CLI (pinned v12.3.3
+# ships only `hiddifypanel`). app.cfg is read relative to CWD, so cd first.
+cd /opt/hiddify-manager/hiddify-panel || exit 1
+exec /opt/hiddify-manager/.venv313/bin/hiddifypanel "$@"
+WRAP
+        chmod +x "$VENV_BIN/$_hcmd"
+    done
+    echo "NOTICE: created hiddify-panel-cli / hiddify-http-api wrappers"
+fi
+
 rm -rf /etc/cron.d/{hiddify_usage_update,hiddify_auto_backup}
 # echo "*/1 * * * * root $(pwd)/update_usage.sh" >/etc/cron.d/hiddify_usage_update
 # echo "0 */6 * * * hiddify-panel $(pwd)/backup.sh" >/etc/cron.d/hiddify_auto_backup

@@ -51,8 +51,19 @@ cadence is slowed and its logging quieted.
   `innodb_buffer_pool_size=64M`, `max_connections=30`, `performance_schema=OFF`.
 - Idempotent (only writes if absent).
 
-### 5. `hiddify-panel/install.sh` — post-install Python patches (submodule)
-Two patches applied after the `hiddifypanel` package installs (so we don't
+### 5. `hiddify-panel/install.sh` — standalone panel install + CLI wrappers + patches
+First, two standalone-install fixes (so a bare `bash install.sh` works from a
+clone, not just via `hiddify_installer.sh`):
+- **Install panel from `./src`** if `hiddifypanel` isn't importable — upstream's
+  `install.sh` only does this when `HIDDIFY_PANLE_SOURCE_DIR` is set (never on a
+  clone), so the panel package would otherwise be missing.
+- **Create `hiddify-panel-cli` / `hiddify-http-api` wrappers** — the pinned panel's
+  `pyproject` ships only the `hiddifypanel` console-script; the PyPI wheel adds the
+  other two but a source install does not. Without them `reload_all_configs` writes
+  an empty `current.json` and the proxy services restart-loop. The wrappers `cd`
+  into the panel dir (panel reads `app.cfg` relative to CWD) and exec `hiddifypanel`.
+
+Then two patches applied after the `hiddifypanel` package installs (so we don't
 have to fork HiddifyPanel separately):
 - **xRay 4.10.2 allowInsecure**: no-ops `q['allowInsecure']='true'` /
   `q['insecure']='true'` in `hutils/proxy/xray.py`. Guarded by a
