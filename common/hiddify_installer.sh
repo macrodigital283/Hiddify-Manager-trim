@@ -156,21 +156,19 @@ function update_panel() {
             #TODO release should change to 3.13
             #install_python310
             activate_python_venv
-            # error "you can not install release version 8 using this script"
-            # exit 1
-            latest=$(get_release_version hiddify-panel)
-            if [[ "$current_panel_version" != "$latest" ]]; then
-                error "The current beta version is outdated! Updating..."
-            fi
-            warning "hiddify panel version current=$current_panel_version latest=$latest"
-            if [[ $force == "true" || "$current_panel_version" != "$latest" ]]; then
-                update_progress "Updating..." "Hiddify Panel from $current_panel_version to $latest" 10
-                # pip3 install -U hiddifypanel==$latest
-                disable_panel_services
-                uv pip install -U wheel hiddifypanel
-                update_progress "Updated..." "Hiddify Panel to $latest" 50
-                return 0
-            fi
+            # TRIM/FORK: install the PINNED HiddifyPanel from the bundled submodule
+            # (hiddify-panel/src @ v12.3.3) instead of fetching latest from upstream.
+            # The upstream path gated the install on a network version check
+            # (get_release_version); when that returned empty the panel install was
+            # silently SKIPPED -> no hiddifypanel module -> panel/bg-tasks fail.
+            # Installing from the submodule is deterministic + self-contained (only
+            # deps come from PyPI) — the whole point of pinning this fork.
+            # Validated on a fresh VPS.
+            disable_panel_services
+            uv pip install -U wheel
+            uv pip install /opt/hiddify-manager/hiddify-panel/src
+            update_progress "Installed..." "Hiddify Panel from bundled submodule (pinned v12.3.3)" 50
+            return 0
         ;;
         *)
             echo "Unknown package mode: $package_mode"

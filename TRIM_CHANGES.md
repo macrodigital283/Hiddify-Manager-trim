@@ -65,6 +65,27 @@ have to fork HiddifyPanel separately):
 - `worker_processes auto` → `1`. nginx is just an internal dispatcher in front
   of xray for WS; one worker suffices.
 
+### 7. `common/hiddify_installer.sh` — install panel from bundled submodule (CRITICAL)
+- The upstream `release` package-mode gated the HiddifyPanel install on a
+  network version check (`get_release_version`). On a raw fork clone that call
+  returns empty, so `current("") != latest("")` is false → the panel install was
+  **silently skipped** → no `hiddifypanel` module → panel + bg-tasks fail to start.
+- Fixed: the `release)` case now does `uv pip install
+  /opt/hiddify-manager/hiddify-manager/hiddify-panel/src` (the pinned submodule),
+  deterministic + self-contained. Only Python deps come from PyPI; hiddifypanel
+  itself is the bundled v12.3.3 source. Without this fix `bash install.sh` from
+  the fork produces a non-working box. Validated on a fresh VPS (139.59.243.108).
+
+## Known minor residual
+- The xRay 4.10.2 patch removes `allowInsecure`/`insecure` from the URL query
+  params. `type=xhttp` configs ALSO embed `allowInsecure:true` inside their
+  `extra=` downloadSettings JSON (a separate code path) — those are NOT patched.
+  Irrelevant for a WS-only deployment. If you ever use xhttp, that JSON would
+  need a separate patch.
+- A fresh install enables Hiddify's default transports; WS (`ws_enable`) and the
+  protocol mix are per-deployment DB settings configured via the panel/API after
+  install (as on the reference box).
+
 ## NOT changed (left as upstream)
 - xray, haproxy, nginx, redis, mariadb-server install — all needed.
 - The panel Python submodule (`hiddify-panel/src`) is untouched; the xray.py
